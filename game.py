@@ -7,10 +7,15 @@ ZONE_TOP = ROWS - 6
 TICK, PLAYER_SPEED, BULLET_SPEED = 0.09, 260, 620
 MUSHROOM_HP = 4
 
+flash_timers = {}      # cell -> seconds of white flash remaining
+_current_cell = None   # set by draw() before it calls mushroom_color
+
 
 def mushroom_color(hp):
-    """Return an (r, g, b) colour for a mushroom with the given hit points, or None for the default."""
-    pass
+    """White flash while the mushroom being drawn is in flash_timers."""
+    if _current_cell in flash_timers:
+        return (255, 255, 255)
+    return None
 
 
 def on_segment_hit(segment, score):
@@ -48,6 +53,7 @@ class Game:
     def reset(self):
         self.score, self.lives, self.wave, self.state = 0, 3, 1, "play"
         self.mushrooms = {}
+        flash_timers.clear()
         for _ in range(45):
             self.mushrooms[(random.randint(1, ZONE_TOP - 2), random.randint(0, COLS - 1))] = MUSHROOM_HP
         self.respawn()
@@ -72,8 +78,10 @@ class Game:
         self.mushrooms[cell] -= 1
         if self.mushrooms[cell] <= 0:
             del self.mushrooms[cell]
+            flash_timers.pop(cell, None)
             self.score += 5
-
+        else:
+            flash_timers[cell] = 0.1
     def split_chain(self, chain, index):
         segment = chain[index]
         self.chains.remove(chain)
@@ -104,7 +112,11 @@ class Game:
     def update(self, dt, keys):
         if self.state != "play":
             return
-        self.invulnerable = max(0.0, self.invulnerable - dt)
+                self.invulnerable = max(0.0, self.invulnerable - dt)
+        for cell in list(flash_timers):
+            flash_timers[cell] -= dt
+            if flash_timers[cell] <= 0:
+                del flash_timers[cell]
         self.x += (keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]) * PLAYER_SPEED * dt
         self.y += (keys[pygame.K_DOWN] - keys[pygame.K_UP]) * PLAYER_SPEED * dt
         self.x = max(10, min(WIDTH - 10, self.x))
@@ -129,9 +141,11 @@ class Game:
             self.wave += 1
             self.spawn_wave()
 
-    def draw(self, screen):
+        def draw(self, screen):
+        global _current_cell
         screen.fill((8, 8, 16))
         for (row, col), hp in self.mushrooms.items():
+            _current_cell = (row, col)
             color = mushroom_color(hp) or (200 - (MUSHROOM_HP - hp) * 40, 80, 170)
             center = (col * CELL + CELL // 2, row * CELL + CELL // 2)
             pygame.draw.circle(screen, color, center, CELL // 2 - 1)
