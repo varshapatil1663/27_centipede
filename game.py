@@ -7,20 +7,31 @@ ZONE_TOP = ROWS - 6
 TICK, PLAYER_SPEED, BULLET_SPEED = 0.09, 260, 620
 MUSHROOM_HP = 4
 
+flash_timers = {}      # cell -> seconds of white flash remaining
+_current_cell = None   # set by draw() before it calls mushroom_color
+
 
 def mushroom_color(hp):
-    """Return an (r, g, b) colour for a mushroom with the given hit points, or None for the default."""
-    pass
+    """White flash while the mushroom being drawn is in flash_timers."""
+    if _current_cell in flash_timers:
+        return (255, 255, 255)
+    return None
+
+
+sparks = []            # each spark: [x, y, vx, vy, life]
 
 
 def on_segment_hit(segment, score):
-    """Called whenever a centipede segment is shot; add sparkles, sounds, or bonus points here."""
-    pass
+    """Spawn a burst of sparks at the destroyed segment's position."""
+    cx = segment.col * CELL + CELL // 2
+    cy = segment.row * CELL + CELL // 2
+    for _ in range(12):
+        sparks.append([cx, cy, random.uniform(-140, 140), random.uniform(-140, 140), 0.5])
 
 
 def wave_speed_bonus(wave):
-    """Return an extra tick-rate multiplier for centipede segments at the given wave, or None for the default speed."""
-    pass
+    """Each wave is 15% faster than the base speed."""
+    return 1 + 0.15 * (wave - 1)
 
 
 class Segment:
@@ -48,6 +59,8 @@ class Game:
     def reset(self):
         self.score, self.lives, self.wave, self.state = 0, 3, 1, "play"
         self.mushrooms = {}
+        flash_timers.clear()
+        sparks.clear()
         for _ in range(45):
             self.mushrooms[(random.randint(1, ZONE_TOP - 2), random.randint(0, COLS - 1))] = MUSHROOM_HP
         self.respawn()
@@ -70,9 +83,12 @@ class Game:
 
     def hit_mushroom(self, cell):
         self.mushrooms[cell] -= 1
-        if self.mushrooms[cell] <= 1:
+        if self.mushrooms[cell] <= 0:
             del self.mushrooms[cell]
+            flash_timers.pop(cell, None)
             self.score += 5
+        else:
+            flash_timers[cell] = 0.1
 
     def split_chain(self, chain, index):
         segment = chain[index]
@@ -82,6 +98,8 @@ class Game:
         self.mushrooms[(segment.row, segment.col)] = MUSHROOM_HP
         self.score += 100 if index == 0 else 10
         on_segment_hit(segment, self.score)
+        if index == 0:
+            self.score += 50
 
     def update_bullet(self, dt):
         if self.bullet is None:
@@ -105,6 +123,15 @@ class Game:
         if self.state != "play":
             return
         self.invulnerable = max(0.0, self.invulnerable - dt)
+        for cell in list(flash_timers):
+            flash_timers[cell] -= dt
+            if flash_timers[cell] <= 0:
+                del flash_timers[cell]
+        for s in sparks:
+            s[0] += s[2] * dt
+            s[1] += s[3] * dt
+            s[4] -= dt
+        sparks[:] = [s for s in sparks if s[4] > 0]
         self.x += (keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]) * PLAYER_SPEED * dt
         self.y += (keys[pygame.K_DOWN] - keys[pygame.K_UP]) * PLAYER_SPEED * dt
         self.x = max(10, min(WIDTH - 10, self.x))
@@ -130,8 +157,10 @@ class Game:
             self.spawn_wave()
 
     def draw(self, screen):
+        global _current_cell
         screen.fill((8, 8, 16))
         for (row, col), hp in self.mushrooms.items():
+            _current_cell = (row, col)
             color = mushroom_color(hp) or (200 - (MUSHROOM_HP - hp) * 40, 80, 170)
             center = (col * CELL + CELL // 2, row * CELL + CELL // 2)
             pygame.draw.circle(screen, color, center, CELL // 2 - 1)
@@ -140,6 +169,10 @@ class Game:
             for index, segment in enumerate(chain):
                 center = (segment.col * CELL + CELL // 2, segment.row * CELL + CELL // 2)
                 pygame.draw.circle(screen, (240, 200, 60) if index == 0 else (80, 220, 90), center, CELL // 2)
+        for x, y, vx, vy, life in sparks:
+            fade = max(0.0, life / 0.5)
+            color = (int(255 * fade), int(200 * fade), int(60 * fade))
+            pygame.draw.circle(screen, color, (int(x), int(y)), 3)
         if self.bullet:
             pygame.draw.rect(screen, (255, 255, 255), (self.bullet.x - 1, self.bullet.y - 6, 3, 10))
         if self.invulnerable <= 0 or int(self.invulnerable * 10) % 2 == 0:
