@@ -18,14 +18,20 @@ def mushroom_color(hp):
     return None
 
 
+sparks = []            # each spark: [x, y, vx, vy, life]
+
+
 def on_segment_hit(segment, score):
-    """Called whenever a centipede segment is shot; add sparkles, sounds, or bonus points here."""
-    pass
+    """Spawn a burst of sparks at the destroyed segment's position."""
+    cx = segment.col * CELL + CELL // 2
+    cy = segment.row * CELL + CELL // 2
+    for _ in range(12):
+        sparks.append([cx, cy, random.uniform(-140, 140), random.uniform(-140, 140), 0.5])
 
 
 def wave_speed_bonus(wave):
-    """Return an extra tick-rate multiplier for centipede segments at the given wave, or None for the default speed."""
-    pass
+    """Each wave is 15% faster than the base speed."""
+    return 1 + 0.15 * (wave - 1)
 
 
 class Segment:
@@ -54,6 +60,7 @@ class Game:
         self.score, self.lives, self.wave, self.state = 0, 3, 1, "play"
         self.mushrooms = {}
         flash_timers.clear()
+        sparks.clear()
         for _ in range(45):
             self.mushrooms[(random.randint(1, ZONE_TOP - 2), random.randint(0, COLS - 1))] = MUSHROOM_HP
         self.respawn()
@@ -91,6 +98,8 @@ class Game:
         self.mushrooms[(segment.row, segment.col)] = MUSHROOM_HP
         self.score += 100 if index == 0 else 10
         on_segment_hit(segment, self.score)
+        if index == 0:
+            self.score += 50
 
     def update_bullet(self, dt):
         if self.bullet is None:
@@ -118,6 +127,11 @@ class Game:
             flash_timers[cell] -= dt
             if flash_timers[cell] <= 0:
                 del flash_timers[cell]
+        for s in sparks:
+            s[0] += s[2] * dt
+            s[1] += s[3] * dt
+            s[4] -= dt
+        sparks[:] = [s for s in sparks if s[4] > 0]
         self.x += (keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]) * PLAYER_SPEED * dt
         self.y += (keys[pygame.K_DOWN] - keys[pygame.K_UP]) * PLAYER_SPEED * dt
         self.x = max(10, min(WIDTH - 10, self.x))
@@ -155,6 +169,10 @@ class Game:
             for index, segment in enumerate(chain):
                 center = (segment.col * CELL + CELL // 2, segment.row * CELL + CELL // 2)
                 pygame.draw.circle(screen, (240, 200, 60) if index == 0 else (80, 220, 90), center, CELL // 2)
+        for x, y, vx, vy, life in sparks:
+            fade = max(0.0, life / 0.5)
+            color = (int(255 * fade), int(200 * fade), int(60 * fade))
+            pygame.draw.circle(screen, color, (int(x), int(y)), 3)
         if self.bullet:
             pygame.draw.rect(screen, (255, 255, 255), (self.bullet.x - 1, self.bullet.y - 6, 3, 10))
         if self.invulnerable <= 0 or int(self.invulnerable * 10) % 2 == 0:
