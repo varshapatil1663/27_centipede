@@ -82,6 +82,7 @@ class Game:
             self.score += 5
         else:
             flash_timers[cell] = 0.1
+
     def split_chain(self, chain, index):
         segment = chain[index]
         self.chains.remove(chain)
@@ -112,7 +113,7 @@ class Game:
     def update(self, dt, keys):
         if self.state != "play":
             return
-                self.invulnerable = max(0.0, self.invulnerable - dt)
+        self.invulnerable = max(0.0, self.invulnerable - dt)
         for cell in list(flash_timers):
             flash_timers[cell] -= dt
             if flash_timers[cell] <= 0:
@@ -141,7 +142,7 @@ class Game:
             self.wave += 1
             self.spawn_wave()
 
-        def draw(self, screen):
+    def draw(self, screen):
         global _current_cell
         screen.fill((8, 8, 16))
         for (row, col), hp in self.mushrooms.items():
